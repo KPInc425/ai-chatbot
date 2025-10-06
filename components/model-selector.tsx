@@ -1,7 +1,7 @@
 "use client";
 
 import type { Session } from "next-auth";
-import { startTransition, useMemo, useOptimistic, useState } from "react";
+import { startTransition, useMemo, useOptimistic, useState, useEffect } from "react";
 import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
-import { chatModels } from "@/lib/ai/models";
+import { chatModels as staticChatModels } from "@/lib/ai/models";
 import { cn } from "@/lib/utils";
 import { CheckCircleFillIcon, ChevronDownIcon } from "./icons";
 
@@ -26,11 +26,35 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const [optimisticModelId, setOptimisticModelId] =
     useOptimistic(selectedModelId);
+  const [remoteModels, setRemoteModels] = useState<typeof staticChatModels | null>(null);
+
+  // fetch dynamic models from server (e.g., Ollama)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/models");
+        if (!res.ok) throw new Error("models fetch failed");
+        const models = await res.json();
+        if (mounted && Array.isArray(models)) {
+          setRemoteModels(models);
+        }
+      } catch (err) {
+        // leave remoteModels null to fall back to static models
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const userType = session.user.type;
   const { availableChatModelIds } = entitlementsByUserType[userType];
 
-  const availableChatModels = chatModels.filter((chatModel) =>
+  const candidateModels = remoteModels ?? staticChatModels;
+
+  const availableChatModels = candidateModels.filter((chatModel) =>
     availableChatModelIds.includes(chatModel.id)
   );
 

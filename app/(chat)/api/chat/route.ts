@@ -43,6 +43,7 @@ import type { AppUsage } from "@/lib/usage";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
+import { getAvailableModels } from "@/lib/ai/getModels";
 
 export const maxDuration = 60;
 
@@ -103,9 +104,16 @@ export async function POST(request: Request) {
     }: {
       id: string;
       message: ChatMessage;
-      selectedChatModel: ChatModel["id"];
+      selectedChatModel: string;
       selectedVisibilityType: VisibilityType;
     } = requestBody;
+
+    // Validate selected model against available models (dynamic providers like Ollama)
+    const available = await getAvailableModels();
+    const allowedIds = available.models.map((m) => m.id);
+    if (!allowedIds.includes(selectedChatModel)) {
+      return new ChatSDKError("bad_request:api").toResponse();
+    }
 
     const session = await auth();
 
